@@ -873,10 +873,41 @@ function SpecialTab({ special, headVerse, onSave }) {
   );
 }
 
+/* ================= 명단 일괄 교체 파싱 =================
+   빈 줄로 셀을 구분하고, 각 블록의 첫 줄은 셀 이름, 이후 줄은 멤버 한 명씩.
+   이름 뒤 괄호로 역할/학년 표시 가능: "최우석 (셀장, 본1)" */
+function parseBulkRoster(text) {
+  const blocks = text.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+  const cells = [];
+  const members = [];
+  blocks.forEach((block) => {
+    const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return;
+    const cellName = lines[0];
+    if (cells.some((c) => c.name === cellName)) return;
+    cells.push({ name: cellName, nick: "", verseRef: "", verseText: "" });
+    lines.slice(1).forEach((line) => {
+      const m = line.match(/^(.+?)\s*(?:\(([^)]*)\))?$/);
+      const name = (m ? m[1] : line).trim();
+      if (!name) return;
+      const tags = m && m[2] ? m[2].split(",").map((t) => t.trim()) : [];
+      let role = "";
+      let cohort = "";
+      tags.forEach((t) => {
+        if (t === "셀장" || t === "헬퍼") role = t;
+        else if (COHORTS.includes(t) || t === "졸업/기타") cohort = t;
+      });
+      members.push({ id: `${cellName}|${name}`, name, cell: cellName, role, cohort, active: true });
+    });
+  });
+  return { version: 1, cells, members };
+}
+
 /* ================= 명단 관리 탭 (관리자) ================= */
 function RosterTab({ roster, onSave }) {
   const [cell, setCell] = useState(roster.cells[0]?.name);
   const [newName, setNewName] = useState("");
+  const [bulkText, setBulkText] = useState("");
   const list = roster.members.filter((m) => m.cell === cell);
 
   const update = (id, patch) => {
@@ -895,13 +926,36 @@ function RosterTab({ roster, onSave }) {
     onSave({ ...roster, members: [...roster.members, { id, name, cell, role: "", cohort: "", active: true }] });
     setNewName("");
   };
-  const resetSeed = () => {
-    if (confirm("명단을 2026년 4월 기도편지 기준으로 초기화할까요? (제출 데이터는 유지)")) onSave(buildSeedRoster());
+  const applyBulk = () => {
+    if (!bulkText.trim()) return;
+    const parsed = parseBulkRoster(bulkText);
+    if (!parsed.cells.length) { alert("셀이 인식되지 않았어요. 형식을 확인해주세요."); return; }
+    if (confirm(`셀 ${parsed.cells.length}개, 멤버 ${parsed.members.length}명으로 명단 전체를 교체할까요?\n(기존 명단 구성은 사라지고, 이미 제출된 기도제목은 그대로 유지돼요)`)) {
+      onSave(parsed);
+      setBulkText("");
+      setCell(parsed.cells[0]?.name);
+    }
   };
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <Card style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+      <Card>
+        <SectionTitle>명단 일괄 교체 (학기 시작 시)</SectionTitle>
+        <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 10, lineHeight: 1.8 }}>
+          셀 이름을 한 줄에 쓰고, 그 아래 멤버를 한 줄에 한 명씩 적어주세요. 셀과 셀 사이는 빈 줄로 구분해요.<br />
+          이름 뒤 괄호로 역할/학년을 표시할 수 있어요 (생략 가능): <b>최우석 (셀장, 본1)</b>
+        </div>
+        <textarea
+          value={bulkText} onChange={(e) => setBulkText(e.target.value)} rows={10}
+          placeholder={"우석태희셀\n최우석 (셀장)\n김태희 (헬퍼)\n김나연 (본1)\n김준성\n\n태섭한별셀\n임태섭 (셀장, 본2)\n박한별 (헬퍼)\n노은성 (본1)"}
+          style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 12, padding: 10, fontSize: 13, background: C.bg, resize: "vertical", fontFamily: SANS, lineHeight: 1.8 }}
+        />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+          <Btn primary onClick={applyBulk}>이 내용으로 명단 전체 교체</Btn>
+        </div>
+      </Card>
+
+      <Card style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {roster.cells.map((c) => (
             <button key={c.name} onClick={() => setCell(c.name)} style={{
@@ -911,7 +965,6 @@ function RosterTab({ roster, onSave }) {
             }}>{c.name}</button>
           ))}
         </div>
-        <Btn onClick={resetSeed} style={{ fontSize: 12 }}>시드로 초기화</Btn>
       </Card>
 
       <Card>
