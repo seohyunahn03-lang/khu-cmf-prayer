@@ -4,6 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KHU CMF 기도편지</title>
+  <script>
+    // 카카오톡 인앱 브라우저는 기능 제한이 많아 이 페이지가 제대로 안 열릴 수 있어서,
+    // 감지되면 즉시 시스템 기본 브라우저(Safari/Chrome)로 열리도록 우회한다.
+    (function () {
+      var ua = navigator.userAgent || navigator.vendor || "";
+      if (/KAKAOTALK/i.test(ua)) {
+        location.href = "kakaotalk://web/openExternal?url=" + encodeURIComponent(location.href);
+      }
+    })();
+  </script>
   <style>
     @font-face {
       font-family: 'NanumBarunGothic';
