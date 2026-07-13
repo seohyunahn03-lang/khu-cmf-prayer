@@ -290,8 +290,13 @@ function letterToText(blocks, ym, headVerse, markdown) {
     if (b.type === "special") out.push(b.text);
     else b.lines.forEach((l) => {
       const roleTag = l.role ? `${l.role} ` : "";
-      const body = l.items.length === 1 ? l.items[0] : l.items.map((it, i) => `${i + 1}. ${it}`).join(" ");
-      out.push(markdown ? `- **${roleTag}${l.name}** ${body}` : `${roleTag}${l.name} ${body}`);
+      if (l.items.length <= 1) {
+        const body = l.items[0] || "";
+        out.push(markdown ? `- **${roleTag}${l.name}** ${body}` : `${roleTag}${l.name} ${body}`);
+      } else {
+        out.push(markdown ? `- **${roleTag}${l.name}**` : `${roleTag}${l.name}`);
+        l.items.forEach((it, i) => out.push(`  ${i + 1}. ${it}`));
+      }
     });
     out.push("");
   });
@@ -781,10 +786,16 @@ function LetterTab({ roster, subs, special, headVerse, ym, notify }) {
                       <span style={{ fontWeight: 700 }}>
                         {l.role && <span style={{ fontSize: 12, fontWeight: 400, color: C.accentDeep, marginRight: 4 }}>{l.role}</span>}
                         {l.name}
-                      </span>{" "}
-                      <span style={{ fontWeight: 400, color: l.submitted ? C.ink : C.inkSoft }}>
-                        {l.items.length === 1 ? l.items[0] : l.items.map((it, i) => `${i + 1}. ${it}`).join(" ")}
                       </span>
+                      {l.items.length <= 1 ? (
+                        <span style={{ fontWeight: 400, color: l.submitted ? C.ink : C.inkSoft }}> {l.items[0] || ""}</span>
+                      ) : (
+                        <div style={{ display: "grid", gap: 2, marginTop: 2 }}>
+                          {l.items.map((it, i) => (
+                            <div key={i} style={{ fontWeight: 400, color: l.submitted ? C.ink : C.inkSoft }}>{i + 1}. {it}</div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
