@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KHU CMF 기도편지</title>
+  <style>
+    @font-face {
+      font-family: 'NanumBarunGothic';
+      src: url("fonts/NanumBarunGothic-Regular.ttf") format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'NanumBarunGothic';
+      src: url("fonts/NanumBarunGothic-Bold.ttf") format('truetype');
+      font-weight: 700;
+      font-style: normal;
+    }
+    html, body { margin: 0; padding: 0; background: #FAF7F0; }
+    body { font-family: 'NanumBarunGothic', 'Apple SD Gothic Neo', sans-serif; }
+    a { color: #C4553B; }
+    a:hover { color: #A03F2B; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  </style>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    // ============================================================
+    // Firebase 설정
+    // Firebase 콘솔(console.firebase.google.com) > 프로젝트 설정 >
+    // "내 앱" > SDK 설정 및 구성 에서 아래 값을 그대로 복사해 넣으세요.
+    // ============================================================
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID",
+    };
+
+    let db = null;
+    try {
+      if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+      } else {
+        console.warn("[firebase] firebaseConfig가 설정되지 않아 이 기기의 localStorage만 사용합니다. index.html 상단의 firebaseConfig를 채워주세요.");
+      }
+    } catch (e) {
+      console.error("[firebase] 초기화 실패:", e);
+    }
+  </script>
+
+  <script type="text/babel" data-presets="react">
+/* 경희 CMF 기도편지 — 편지 무드 리디자인 (NanumBarunGothic) */
+const { useState, useEffect, useMemo } = React;
+
+/* ================= design tokens (산뜻한 편지 무드) ================= */
+const C = {
+  ink: "#4A3B2F",
+  inkSoft: "#A6937F",
+  bg: "#FAF7F0",
+  bgDeep: "#F1EADC",
+  card: "#FFFFFF",
+  line: "#E9DFCE",
+  accent: "#C4553B",      // 왁스 실 레드
+  accentDeep: "#A03F2B",
+  blue: "#7FA6BF",
+  rose: "#D98E8E",
+  kraft: "#EDDFC5",       // 봉투 크라프트
+  kraftDeep: "#E0CDAA",
+};
+const CELL_PALETTE = ["#C4553B", "#7FA6BF", "#D98E8E", "#8A6B4F", "#B98AA0", "#C79A5B", "#8FB0C4", "#9C8563"];
+const SANS = "'NanumBarunGothic','Apple SD Gothic Neo',sans-serif";
+const AIRMAIL = `repeating-linear-gradient(135deg, ${C.accent} 0 10px, #fff 10px 20px, ${C.blue} 20px 30px, #fff 30px 40px)`;
+
+/* ================= 상수 ================= */
+const MEMBER_PASS = "2026";
+const ADMIN_PASS = "202600";
+const DEFAULT_PHRASE = "지체님의 삶 가운데 하나님께서 늘 함께하시기를 기도합니다.";
+const SPECIAL_SECTIONS = ["제완주 간사님", "대표단", "찬양팀", "중보기도팀", "한국누가회"];
+const COHORTS = ["본1", "본2", "본3", "본4", "예1", "예2"];
+const DEFAULT_HEAD_VERSE = {
+  ref: "빌립보서 4:6-7",
+  text: "아무 것도 염려하지 말고 다만 모든 일에 기도와 간구로, 너희 구할 것을 감사함으로 하나님께 아뢰라 그리하면 모든 지각에 뛰어난 하나님의 평강이 그리스도 예수 안에서 너희 마음과 생각을 지키시리라",
+};
+
+/* ================= 2026-04 기도편지 기준 시드 명단 ================= */
+const B1 = new Set([
+  "태섭한별|노은성", "태섭한별|강다솔", "태섭한별|유진", "태섭한별|백찬양",
+  "성율현지|성호정", "수현서현|안서현", "수현서현|엄영민", "하경다인|박다인",
+  "하경다인|윤선욱", "지원서희|윤지원", "정민유진|황정민", "정민유진|송현서", "정민유진|김하희",
+]);
+const SEED_CELLS = [
+  { name: "우석태희", nick: "", verseRef: "", verseText: "", leader: "최우석", helper: "김태희",
+    members: ["김나연","김준성","이준","손유민","김현우","김연우","김주안","백예원","변소정","어도양","오현준","이승석","이승연","임정민","진민종"] },
+  { name: "태섭한별", nick: "", verseRef: "", verseText: "", leader: "임태섭", helper: "박한별",
+    members: ["노은성","이예나","임예진","강다솔","배유민","유진","백상기","백찬양","박찬현","이승연","이정민","이윤서","이규은","이솔","박근영"] },
+  { name: "성율현지", nick: "", verseRef: "", verseText: "", leader: "박성율", helper: "이현지",
+    members: ["허윤서","장예림","권민서","김소희","박유빈","성호정","송민서","엄예찬","이동재","이지민","이현빈","조은서","채시완","최선묘","한운지"] },
+  { name: "수현서현", nick: "하나님의 현현셀 s2", verseRef: "이사야 40:3-5",
+    verseText: "외치는 자의 소리여 이르되 너희는 광야에서 여호와의 길을 예비하라 사막에서 우리 하나님의 대로를 평탄하게 하라 골짜기마다 돋우어지며 산마다, 언덕마다 낮아지며 고르지 아니한 곳이 평탄하게 되며 험한 곳이 평지가 될 것이요 여호와의 영광이 나타나고 모든 육체가 그것을 함께 보리라 이는 여호와의 입이 말씀하셨느니라",
+    leader: "임수현", helper: "안서현",
+    members: ["김동희","김주원","김지윤","노세현","박진서","박형권","성준모","엄영민","이은민","장예신","정유진","조하은","최영","최주안"] },
+  { name: "하경다인", nick: "", verseRef: "", verseText: "", leader: "신하경", helper: "박다인",
+    members: ["류화림","정루하","이성윤","주영","권서윤","김주희","김소현","김한수","윤선욱","오은택","이유정","임세혁","정서현","조수연"] },
+  { name: "소민도현", nick: "소나무셀", verseRef: "이사야 41:19-20",
+    verseText: "\u201c내가 광야에는 백향목과 아카시아와 화석류와 들올리브 나무를 심고, 사막에는 잣나무와 소나무와 회양목을 함께 심겠다.\u201d 사람들이 이것을 보고, 주님께서 이 일을 몸소 하셨다는 것을 알게 될 것이다. 이스라엘의 거룩하신 하나님께서 이것을 창조하셨다는 것을 깨닫게 될 것이다.",
+    leader: "이소민", helper: "남도현",
+    members: ["여예진","윤용준","고예은","차권일","정현수","정문준","안수현","이은총","김지연","김진호","성준호","정우현","임은비","주예원","이준서","성서윤"] },
+  { name: "지원서희", nick: "피자셀", verseRef: "요한복음 4:7",
+    verseText: "사랑하는 여러분, 서로 사랑합시다. 사랑은 하나님에게서 난 것입니다. 사랑하는 사람은 다 하나님에게서 났고, 하나님을 압니다.",
+    leader: "윤지원", helper: "정서희",
+    members: ["황주은","김현진","강수정","김승우","김태원","남선우","박수민","안세민","윤종원","이예빈","이유지","이정빈","정원용","정이준","한재원"] },
+  { name: "정민유진", nick: "쉴만한셀", verseRef: "시편 23:1-2",
+    verseText: "여호와는 나의 목자시니 내게 부족함이 없으리로다 그가 나를 푸른 풀밭에 누이시며 쉴 만한 물 가로 인도하시는도다",
+    leader: "황정민", helper: "최유진",
+    members: ["송현서","김하희","유시은","김지은","민혜윤","송지후","신초애","오현수","박다연","최윤서","임윤정","김연성","유찬형","김민준","이건"] },
+];
+
+function buildSeedRoster() {
+  const cells = [];
+  const members = [];
+  SEED_CELLS.forEach((c) => {
+    cells.push({ name: c.name, nick: c.nick, verseRef: c.verseRef, verseText: c.verseText });
+    const push = (name, role) =>
+      members.push({
+        id: `${c.name}|${name}`,
+        name, cell: c.name, role,
+        cohort: B1.has(`${c.name}|${name}`) ? "본1" : "",
+        active: true,
+      });
+    push(c.leader, "셀장");
+    push(c.helper, "헬퍼");
+    c.members.forEach((m) => push(m, ""));
+  });
+  return { version: 1, cells, members };
+}
+
+/* ================= storage =================
+   순서: (1) 아티팩트 호스트의 window.storage (있으면) →
+         (2) Firebase Firestore (db가 있으면, 실제 배포 환경) →
+         (3) localStorage (오프라인/설정 전 임시 fallback) */
+const hasRemote = typeof window !== "undefined" && window.storage && window.storage.get;
+const S = {
+  async get(key) {
+    try {
+      if (hasRemote) {
+        const r = await window.storage.get(key, true);
+        return r ? JSON.parse(r.value) : null;
+      }
+      if (typeof db !== "undefined" && db) {
+        const snap = await db.collection("kv").doc(key).get();
+        return snap.exists ? snap.data().value : null;
+      }
+      const v = localStorage.getItem("khcmf:" + key);
+      return v ? JSON.parse(v) : null;
+    } catch (e) { console.error("[storage.get]", key, e); return null; }
+  },
+  async set(key, val) {
+    try {
+      if (hasRemote) {
+        const r = await window.storage.set(key, JSON.stringify(val), true);
+        return !!r;
+      }
+      if (typeof db !== "undefined" && db) {
+        await db.collection("kv").doc(key).set({ value: val, updatedAt: Date.now() });
+        return true;
+      }
+      localStorage.setItem("khcmf:" + key, JSON.stringify(val));
+      return true;
+    } catch (e) { console.error("[storage.set]", key, e); return false; }
+  },
+};
+const monthKey = (ym, suffix) => `pl:${ym}:${suffix}`;
+
+/* ================= utils ================= */
+function nowYM() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+function shiftYM(ym, delta) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+const ymLabel = (ym) => {
+  const [y, m] = ym.split("-");
+  return `${y}년 ${Number(m)}월`;
+};
+function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  } catch {}
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+  return Promise.resolve();
+}
+
+/* ================= 편지 조립 ================= */
+function assembleLetter({ roster, subs, special, headVerse, filter }) {
+  const blocks = [];
+  const memberLine = (m, sub) => ({
+    name: m.name, role: m.role,
+    items: sub?.items?.length ? sub.items : [DEFAULT_PHRASE],
+    submitted: !!sub?.items?.length,
+  });
+  const cohortBlock = (co) => {
+    const list = roster.members.filter((m) => m.active && m.cohort === co);
+    return {
+      type: "flat",
+      title: `${co} 기도제목`,
+      lines: list.map((m) => memberLine(m, subs[m.cell]?.[m.id])),
+    };
+  };
+
+  if (COHORTS.includes(filter)) {
+    blocks.push(cohortBlock(filter));
+    return blocks;
+  }
+
+  if (filter === "학년별") {
+    COHORTS.forEach((co) => {
+      const b = cohortBlock(co);
+      if (b.lines.length) blocks.push(b);
+    });
+    return blocks;
+  }
+
+  SPECIAL_SECTIONS.slice(0, 2).forEach((sec) => {
+    if (special?.[sec]) blocks.push({ type: "special", title: sec, text: special[sec] });
+  });
+  roster.cells.forEach((cell) => {
+    const cellMembers = roster.members.filter((m) => m.active && m.cell === cell.name);
+    const ordered = [
+      ...cellMembers.filter((m) => m.role === "셀장"),
+      ...cellMembers.filter((m) => m.role === "헬퍼"),
+      ...cellMembers.filter((m) => !m.role),
+    ];
+    blocks.push({
+      type: "cell",
+      title: `${cell.name}셀`,
+      nick: cell.nick, verseRef: cell.verseRef, verseText: cell.verseText,
+      lines: ordered.map((m) => memberLine(m, subs[cell.name]?.[m.id])),
+    });
+  });
+  SPECIAL_SECTIONS.slice(2).forEach((sec) => {
+    if (special?.[sec]) blocks.push({ type: "special", title: sec, text: special[sec] });
+  });
+  return blocks;
+}
+
+function letterToText(blocks, ym, headVerse, markdown) {
+  const H = (t) => (markdown ? `## ${t}` : `♥ ${t}`);
+  const out = [];
+  out.push(markdown ? `# 경희 CMF ${ymLabel(ym)} 기도편지` : `경희 CMF ${ymLabel(ym)} 기도편지`);
+  out.push("");
+  out.push(headVerse.text);
+  out.push(`-${headVerse.ref}-`);
+  out.push("");
+  blocks.forEach((b) => {
+    out.push(H(b.title + (b.nick ? ` (${b.verseRef}, ${b.nick})` : b.verseRef ? ` (${b.verseRef})` : "")));
+    if (b.verseText) out.push(markdown ? `> ${b.verseText}` : `“${b.verseText}”`);
+    if (b.type === "special") out.push(b.text);
+    else b.lines.forEach((l) => {
+      const roleTag = l.role ? `${l.role} ` : "";
+      const body = l.items.length === 1 ? l.items[0] : l.items.map((it, i) => `${i + 1}. ${it}`).join(" ");
+      out.push(markdown ? `- **${roleTag}${l.name}** ${body}` : `${roleTag}${l.name} ${body}`);
+    });
+    out.push("");
+  });
+  return out.join("\n");
+}
+
+/* ================= 공용 UI ================= */
+const Spinner = ({ size = 16 }) => (
+  <span style={{
+    width: size, height: size, boxSizing: "border-box", display: "inline-block",
+    border: `2px solid ${C.line}`, borderTopColor: C.accent, borderRadius: "50%",
+    animation: "spin 0.9s linear infinite",
+  }} />
+);
+const btnBase = {
+  border: `1.5px solid ${C.line}`, borderRadius: 999, padding: "8px 16px",
+  background: C.card, color: C.ink, cursor: "pointer", fontFamily: SANS, fontSize: 14,
+  fontWeight: 400, display: "inline-flex", alignItems: "center", gap: 6,
+  whiteSpace: "nowrap", flexShrink: 0,
+};
+function Btn({ primary, children, ...p }) {
+  return (
+    <button {...p} style={{
+      ...btnBase,
+      ...(primary ? { background: C.accent, borderColor: C.accentDeep, color: "#fff", fontWeight: 700 } : {}),
+      opacity: p.disabled ? 0.5 : 1, ...p.style,
+    }}>{children}</button>
+  );
+}
+function Card({ children, style }) {
+  return (
+    <div style={{
+      background: C.card, border: `1px solid ${C.line}`, borderRadius: 16,
+      padding: 18, boxShadow: "0 2px 10px rgba(74,59,47,0.05)", ...style,
+    }}>{children}</div>
+  );
+}
+function SectionTitle({ children }) {
+  return (
+    <div style={{
+      fontFamily: SANS, fontSize: 16, fontWeight: 700, color: C.ink,
+      display: "flex", alignItems: "center", gap: 8, margin: "4px 0 12px",
+    }}>
+      <span style={{ color: C.accent, fontSize: 13 }}>♥</span>{children}
+    </div>
+  );
+}
+
+/* ================= 게이트: 편지봉투 ================= */
+function Gate({ onEnter }) {
+  const [code, setCode] = useState("");
+  const [err, setErr] = useState(false);
+  const [opening, setOpening] = useState(false);
+
+  const submit = () => {
+    const v = code.trim().toLowerCase();
+    let admin = null;
+    if (v === ADMIN_PASS) admin = true;
+    else if (v === MEMBER_PASS) admin = false;
+    if (admin === null) { setErr(true); return; }
+    setOpening(true);
+    setTimeout(() => onEnter(admin), 1900);
+  };
+
+  const W = 340, H = 220;
+  return (
+    <div style={{
+      minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", fontFamily: SANS, gap: 28,
+      overflow: "hidden",
+    }}>
+      {/* 봉투 */}
+      <div style={{ perspective: 900, opacity: opening ? undefined : 1 }}>
+        <div style={{
+          position: "relative", width: W, height: H,
+          transition: "opacity .5s ease 1.5s, transform .5s ease 1.5s",
+          opacity: opening ? 0 : 1,
+          transform: opening ? "translateY(30px)" : "none",
+        }}>
+          {/* 봉투 뒷면 */}
+          <div style={{
+            position: "absolute", inset: 0, background: C.kraft, borderRadius: 10,
+            border: `1px solid ${C.kraftDeep}`, boxShadow: "0 14px 34px rgba(74,59,47,0.16)",
+          }} />
+          {/* 속지 편지 — 닫힌 동안엔 봉투 안에 완전히 숨김 */}
+          <div style={{
+            position: "absolute", left: 14, right: 14, top: 46, height: H - 66,
+            background: "#fff", borderRadius: 6, border: `1px solid ${C.line}`,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+            transition: "transform .9s cubic-bezier(.22,1,.36,1) .55s",
+            transform: opening ? `translateY(-${H + 50}px)` : "translateY(0)",
+            zIndex: opening ? 4 : 2,
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 19, color: C.ink, letterSpacing: 1 }}>KHU CMF 기도편지</div>
+            <div style={{ fontSize: 12, color: C.inkSoft }}>함께 기도하는 공간</div>
+          </div>
+          {/* 봉투 윗부분 크라프트 패널 (모서리를 크라프트로 유지 + 닫힌 편지 가림) */}
+          <div style={{
+            position: "absolute", left: 0, right: 0, top: 0, height: H * 0.4,
+            background: C.kraft, borderRadius: "10px 10px 0 0",
+            border: `1px solid ${C.kraftDeep}`, borderBottom: "none", boxSizing: "border-box",
+            zIndex: 3,
+          }} />
+          {/* 봉투 앞면 포켓 */}
+          <div style={{
+            position: "absolute", left: 0, right: 0, bottom: 0, height: H * 0.62,
+            background: `linear-gradient(180deg, ${C.kraft}, ${C.kraftDeep})`,
+            borderRadius: "6px 6px 10px 10px", border: `1px solid ${C.kraftDeep}`,
+            boxSizing: "border-box", zIndex: 5,
+            display: "flex", alignItems: "flex-end", justifyContent: "space-between",
+            padding: "0 16px 12px",
+          }}>
+            <span style={{ fontSize: 11, color: C.ink, opacity: 0.55, letterSpacing: 1 }}>TO. 경희 CMF 지체들에게</span>
+            <span style={{
+              width: 34, height: 24, borderRadius: 3, background: "#fff",
+              border: `1px solid ${C.kraftDeep}`, display: "inline-flex",
+              alignItems: "center", justifyContent: "center", fontSize: 12, color: C.accent,
+            }}>♥</span>
+          </div>
+          {/* 플랩 (뚜껑) */}
+          <div style={{
+            position: "absolute", left: 0, right: 0, top: 0, height: H * 0.52,
+            transformOrigin: "top center", transformStyle: "preserve-3d",
+            transition: "transform .8s cubic-bezier(.4,0,.2,1), z-index 0s .4s",
+            transform: opening ? "rotateX(180deg)" : "rotateX(0deg)",
+            zIndex: opening ? 1 : 6,
+            clipPath: "polygon(0 0, 100% 0, 50% 100%)",
+            background: `linear-gradient(180deg, ${C.kraftDeep}, ${C.kraft})`,
+            borderRadius: "10px 10px 0 0",
+          }} />
+          {/* 왁스 실 */}
+          <div style={{
+            position: "absolute", left: "50%", top: H * 0.52 - 22, marginLeft: -22,
+            width: 44, height: 44, borderRadius: "50%", zIndex: 7,
+            background: `radial-gradient(circle at 35% 30%, #D96A4E, ${C.accentDeep})`,
+            boxShadow: "0 3px 8px rgba(160,63,43,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#FFF3EC", fontSize: 15, fontWeight: 700,
+            transition: "opacity .35s ease, transform .5s ease",
+            opacity: opening ? 0 : 1,
+            transform: opening ? "scale(0.6) rotate(-20deg)" : "none",
+          }}>♥</div>
+        </div>
+      </div>
+
+      {/* 코드 입력 */}
+      <div style={{
+        width: 320, textAlign: "center",
+        transition: "opacity .4s ease", opacity: opening ? 0 : 1,
+        pointerEvents: opening ? "none" : "auto",
+      }}>
+        <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 12 }}>접근 코드를 입력하면 편지가 열려요</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            type="password" value={code} placeholder="접근 코드"
+            autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false}
+            onChange={(e) => { setCode(e.target.value); setErr(false); }}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            style={{
+              flex: 1, border: `1.5px solid ${err ? C.rose : C.line}`, borderRadius: 999,
+              padding: "10px 16px", fontSize: 14, background: "#fff", color: C.ink,
+              outline: "none", fontFamily: SANS,
+            }}
+          />
+          <Btn primary onClick={submit}>편지 열기</Btn>
+        </div>
+        {err && <div style={{ color: C.rose, fontSize: 12, marginTop: 10 }}>코드가 맞지 않아요. 셀장/헬퍼에게 문의해주세요.</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ================= 메인 앱 ================= */
+function App() {
+  const [entered, setEntered] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [tab, setTab] = useState("submit");
+  const [ym, setYm] = useState(nowYM());
+  const [roster, setRoster] = useState(null);
+  const [subs, setSubs] = useState({});
+  const [special, setSpecial] = useState({});
+  const [headVerse, setHeadVerse] = useState(DEFAULT_HEAD_VERSE);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState("");
+
+  const notify = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2200); };
+
+  useEffect(() => {
+    if (!entered) return;
+    (async () => {
+      let r = await S.get("pl:members");
+      if (!r) { r = buildSeedRoster(); await S.set("pl:members", r); }
+      setRoster(r);
+    })();
+  }, [entered]);
+
+  useEffect(() => {
+    if (!roster) return;
+    let cancel = false;
+    (async () => {
+      setLoading(true);
+      const cellNames = roster.cells.map((c) => c.name);
+      const results = await Promise.all(cellNames.map((c) => S.get(monthKey(ym, `cell:${c}`))));
+      const sp = await S.get(monthKey(ym, "special"));
+      if (cancel) return;
+      const map = {};
+      cellNames.forEach((c, i) => { map[c] = results[i] || {}; });
+      setSubs(map);
+      setSpecial(sp?.sections || {});
+      setHeadVerse(sp?.headVerse || DEFAULT_HEAD_VERSE);
+      setLoading(false);
+    })();
+    return () => { cancel = true; };
+  }, [roster, ym]);
+
+  const saveSubmission = async (member, items) => {
+    const key = monthKey(ym, `cell:${member.cell}`);
+    const latest = (await S.get(key)) || {};
+    latest[member.id] = { items, at: Date.now() };
+    const ok = await S.set(key, latest);
+    if (ok) {
+      setSubs((p) => ({ ...p, [member.cell]: latest }));
+      notify(`${member.name} 기도제목이 저장됐어요`);
+    } else notify("저장에 실패했어요. 다시 시도해주세요.");
+    return ok;
+  };
+
+  const saveSpecial = async (sections, hv) => {
+    const ok = await S.set(monthKey(ym, "special"), { sections, headVerse: hv });
+    if (ok) { setSpecial(sections); setHeadVerse(hv); notify("공통 섹션이 저장됐어요"); }
+    else notify("저장에 실패했어요.");
+  };
+
+  const saveRoster = async (next) => {
+    const ok = await S.set("pl:members", next);
+    if (ok) { setRoster(next); notify("명단이 저장됐어요"); }
+    else notify("저장에 실패했어요.");
+  };
+
+  if (!entered) return <Gate onEnter={(admin) => { setIsAdmin(admin); setEntered(true); }} />;
+
+  const tabs = [
+    { id: "submit", label: "기도제목 제출" },
+    { id: "letter", label: "편지 보기" },
+    ...(isAdmin ? [
+      { id: "status", label: "제출 현황" },
+      { id: "special", label: "공통 섹션" },
+      { id: "roster", label: "명단 관리" },
+    ] : []),
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: SANS, color: C.ink, animation: "fadeUp .6s ease both" }}>
+      {/* 에어메일 스트라이프 */}
+      <div style={{ height: 6, background: AIRMAIL, opacity: 0.85 }} />
+      {/* header */}
+      <div style={{ background: C.card, borderBottom: `1px solid ${C.line}`, padding: "16px 20px 12px" }}>
+        <div style={{ maxWidth: 860, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{
+              width: 34, height: 34, borderRadius: "50%", background: C.accent, color: "#fff",
+              display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+            }}>✉</span>
+            <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: 0.5 }}>KHU CMF 기도편지</span>
+            {isAdmin && <span style={{ fontSize: 11, background: C.bgDeep, border: `1px solid ${C.line}`, borderRadius: 20, padding: "2px 10px", color: C.accentDeep, fontWeight: 700 }}>관리자</span>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Btn onClick={() => setYm(shiftYM(ym, -1))} style={{ padding: "6px 12px" }}>‹</Btn>
+            <span style={{ fontWeight: 700, minWidth: 96, textAlign: "center", fontSize: 15 }}>{ymLabel(ym)}</span>
+            <Btn onClick={() => setYm(shiftYM(ym, 1))} style={{ padding: "6px 12px" }}>›</Btn>
+          </div>
+        </div>
+        <div style={{ maxWidth: 860, margin: "12px auto 0", display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {tabs.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              ...btnBase, padding: "7px 14px", fontSize: 13,
+              background: tab === t.id ? C.ink : "transparent",
+              color: tab === t.id ? "#FFFDF8" : C.inkSoft,
+              border: tab === t.id ? `1.5px solid ${C.ink}` : "1.5px solid transparent",
+              fontWeight: tab === t.id ? 700 : 400,
+            }}>{t.label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px 60px" }}>
+        {loading || !roster ? (
+          <div style={{ textAlign: "center", padding: 60, color: C.inkSoft }}>
+            <Spinner size={22} />
+            <div style={{ marginTop: 10, fontSize: 13 }}>불러오는 중…</div>
+          </div>
+        ) : (
+          <>
+            {tab === "submit" && <SubmitTab roster={roster} subs={subs} onSave={saveSubmission} ym={ym} />}
+            {tab === "letter" && <LetterTab roster={roster} subs={subs} special={special} headVerse={headVerse} ym={ym} notify={notify} />}
+            {tab === "status" && isAdmin && <StatusTab roster={roster} subs={subs} ym={ym} notify={notify} />}
+            {tab === "special" && isAdmin && <SpecialTab special={special} headVerse={headVerse} onSave={saveSpecial} />}
+            {tab === "roster" && isAdmin && <RosterTab roster={roster} onSave={saveRoster} />}
+          </>
+        )}
+      </div>
+
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+          background: C.ink, color: "#fff", borderRadius: 12, padding: "10px 18px",
+          fontSize: 13, boxShadow: "0 4px 16px rgba(0,0,0,0.18)", zIndex: 50, fontFamily: SANS,
+        }}>{toast}</div>
+      )}
+    </div>
+  );
+}
+
+/* ================= 제출 탭 ================= */
+function SubmitTab({ roster, subs, onSave, ym }) {
+  const [cell, setCell] = useState(null);
+  const [member, setMember] = useState(null);
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const cellMembers = useMemo(() => {
+    if (!cell) return [];
+    const list = roster.members.filter((m) => m.active && m.cell === cell);
+    return [
+      ...list.filter((m) => m.role === "셀장"),
+      ...list.filter((m) => m.role === "헬퍼"),
+      ...list.filter((m) => !m.role),
+    ];
+  }, [roster, cell]);
+
+  const pick = (m) => {
+    setMember(m);
+    const prev = subs[m.cell]?.[m.id];
+    setText(prev?.items?.join("\n") || "");
+  };
+
+  const save = async () => {
+    const items = text.split("\n").map((s) => s.trim().replace(/^\d+[.)]\s*/, "")).filter(Boolean);
+    if (!items.length) return;
+    setSaving(true);
+    await onSave(member, items);
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <Card>
+        <SectionTitle>{ymLabel(ym)} 기도제목 제출</SectionTitle>
+        <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 12 }}>셀 → 이름을 선택하고, 기도제목을 한 줄에 하나씩 적어주세요.</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {roster.cells.map((c, i) => (
+            <button key={c.name} onClick={() => { setCell(c.name); setMember(null); }} style={{
+              ...btnBase, padding: "7px 12px", fontSize: 13,
+              borderColor: cell === c.name ? CELL_PALETTE[i % CELL_PALETTE.length] : C.line,
+              background: cell === c.name ? CELL_PALETTE[i % CELL_PALETTE.length] : C.card,
+              color: cell === c.name ? "#fff" : C.ink,
+              fontWeight: cell === c.name ? 700 : 400,
+            }}>{c.name}</button>
+          ))}
+        </div>
+      </Card>
+
+      {cell && (
+        <Card>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {cellMembers.map((m) => {
+              const done = !!subs[m.cell]?.[m.id]?.items?.length;
+              const sel = member?.id === m.id;
+              return (
+                <button key={m.id} onClick={() => pick(m)} style={{
+                  ...btnBase, padding: "7px 12px", fontSize: 13, fontWeight: 700,
+                  background: sel ? C.ink : done ? C.bgDeep : C.card,
+                  color: sel ? "#fff" : C.ink,
+                }}>
+                  {m.role && <span style={{ fontSize: 11, fontWeight: 400, color: sel ? "#f0e6d4" : C.accentDeep }}>{m.role}</span>}
+                  {m.name}
+                  {done && <span style={{ color: sel ? "#fff" : C.blue, fontSize: 12 }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {member && (
+        <Card>
+          <SectionTitle>{member.name} 님의 기도제목</SectionTitle>
+          <textarea
+            value={text} onChange={(e) => setText(e.target.value)} rows={6}
+            placeholder={"예)\n시험기간 지혜롭게 보낼 수 있기를\n가족 모두 건강하기를"}
+            style={{
+              width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 12,
+              padding: 12, fontSize: 14, fontFamily: SANS, background: C.bg,
+              color: C.ink, outline: "none", resize: "vertical",
+            }}
+          />
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+            <Btn primary onClick={save} disabled={saving || !text.trim()}>
+              {saving ? <Spinner size={15} /> : "✉"} 저장하기
+            </Btn>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ================= 편지 보기 탭 ================= */
+function LetterTab({ roster, subs, special, headVerse, ym, notify }) {
+  const [filter, setFilter] = useState("전체");
+  const blocks = useMemo(
+    () => assembleLetter({ roster, subs, special, headVerse, filter }),
+    [roster, subs, special, headVerse, filter]
+  );
+  const doCopy = async (md) => {
+    await copyText(letterToText(blocks, ym, headVerse, md));
+    notify(md ? "마크다운으로 복사했어요 (Obsidian에 바로 붙여넣기)" : "텍스트로 복사했어요");
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <Card style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ display: "flex", gap: 6 }}>
+          {["전체", "학년별", ...COHORTS].map((f) => (
+            <button key={f} onClick={() => setFilter(f)} style={{
+              ...btnBase, padding: "6px 14px", fontSize: 13,
+              background: filter === f ? C.accent : C.card,
+              color: filter === f ? "#fff" : C.ink,
+              borderColor: filter === f ? C.accentDeep : C.line,
+              fontWeight: filter === f ? 700 : 400,
+            }}>{f}</button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn onClick={() => doCopy(false)}>텍스트 복사</Btn>
+          <Btn onClick={() => doCopy(true)}>마크다운 복사</Btn>
+        </div>
+      </Card>
+
+      {/* 편지 본문 — 진짜 편지지 무드 */}
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ height: 8, background: AIRMAIL, opacity: 0.85 }} />
+        <div style={{ padding: "34px 32px 40px" }}>
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: "50%", margin: "0 auto 10px",
+              background: `radial-gradient(circle at 35% 30%, #D96A4E, ${C.accentDeep})`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#FFF3EC", fontSize: 16, boxShadow: "0 3px 8px rgba(160,63,43,0.3)",
+            }}>♥</div>
+            <div style={{ fontSize: 24, fontWeight: 700, margin: "6px 0" }}>
+              경희 CMF {ymLabel(ym)} {filter !== "전체" ? `${filter} ` : ""}기도편지
+            </div>
+            <div style={{ fontSize: 13.5, color: C.inkSoft, maxWidth: 560, margin: "10px auto 0", lineHeight: 1.8, fontWeight: 400 }}>
+              {headVerse.text}
+              <div style={{ marginTop: 4 }}>-{headVerse.ref}-</div>
+            </div>
+          </div>
+
+          {blocks.map((b, bi) => (
+            <div key={bi} style={{ marginBottom: 28 }}>
+              <div style={{
+                fontWeight: 700, fontSize: 16.5,
+                borderBottom: `1.5px dashed ${C.line}`, paddingBottom: 8, marginBottom: 12,
+                display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap",
+              }}>
+                <span style={{ color: C.accent, fontSize: 13 }}>♥</span>{b.title}
+                {(b.verseRef || b.nick) && (
+                  <span style={{ fontSize: 12.5, fontWeight: 400, color: C.inkSoft }}>
+                    {[b.verseRef, b.nick].filter(Boolean).join(", ")}
+                  </span>
+                )}
+              </div>
+              {b.verseText && (
+                <div style={{
+                  fontSize: 13, color: C.inkSoft, lineHeight: 1.8, fontWeight: 400,
+                  background: C.bg, border: `1px solid ${C.line}`,
+                  padding: "10px 14px", borderRadius: 10, marginBottom: 12,
+                }}>“{b.verseText}”</div>
+              )}
+              {b.type === "special" ? (
+                <div style={{ fontSize: 14, lineHeight: 1.9, whiteSpace: "pre-wrap", fontWeight: 400 }}>{b.text}</div>
+              ) : (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {b.lines.map((l, li) => (
+                    <div key={li} style={{ fontSize: 14, lineHeight: 1.8 }}>
+                      <span style={{ fontWeight: 700 }}>
+                        {l.role && <span style={{ fontSize: 12, fontWeight: 400, color: C.accentDeep, marginRight: 4 }}>{l.role}</span>}
+                        {l.name}
+                      </span>{" "}
+                      <span style={{ fontWeight: 400, color: l.submitted ? C.ink : C.inkSoft }}>
+                        {l.items.length === 1 ? l.items[0] : l.items.map((it, i) => `${i + 1}. ${it}`).join(" ")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          <div style={{ textAlign: "center", marginTop: 34, fontSize: 13, color: C.inkSoft }}>
+            FROM. 경희 CMF ♥
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ================= 제출 현황 탭 (관리자) ================= */
+function StatusTab({ roster, subs, ym, notify }) {
+  const rows = roster.cells.map((c, i) => {
+    const list = roster.members.filter((m) => m.active && m.cell === c.name);
+    const missing = list.filter((m) => !subs[c.name]?.[m.id]?.items?.length);
+    return { cell: c.name, total: list.length, done: list.length - missing.length, missing, color: CELL_PALETTE[i % CELL_PALETTE.length] };
+  });
+  const totalDone = rows.reduce((a, r) => a + r.done, 0);
+  const totalAll = rows.reduce((a, r) => a + r.total, 0);
+
+  const copyReminder = async () => {
+    const lines = [`[${ymLabel(ym)} 기도편지 미제출 안내]`];
+    rows.forEach((r) => {
+      if (r.missing.length) lines.push(`· ${r.cell}셀: ${r.missing.map((m) => m.name).join(", ")}`);
+    });
+    lines.push("", "기도제목 부탁드려요 🙏");
+    await copyText(lines.join("\n"));
+    notify("리마인드 문구를 복사했어요 (카톡에 붙여넣기)");
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <Card style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <SectionTitle>{ymLabel(ym)} 제출 현황 — {totalDone}/{totalAll}명</SectionTitle>
+        <Btn primary onClick={copyReminder}>미제출자 리마인드 복사</Btn>
+      </Card>
+      {rows.map((r) => (
+        <Card key={r.cell}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, alignItems: "center" }}>
+            <span style={{ fontWeight: 700 }}>{r.cell}셀</span>
+            <span style={{ fontSize: 13, color: C.inkSoft }}>{r.done}/{r.total}</span>
+          </div>
+          <div style={{ height: 8, background: C.bgDeep, borderRadius: 6, overflow: "hidden", marginBottom: 10 }}>
+            <div style={{ width: `${r.total ? (r.done / r.total) * 100 : 0}%`, height: "100%", background: r.color, transition: "width .3s" }} />
+          </div>
+          {r.missing.length > 0 ? (
+            <div style={{ fontSize: 13, color: C.inkSoft, fontWeight: 400 }}>
+              미제출: {r.missing.map((m) => m.name).join(", ")}
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: C.blue, display: "flex", alignItems: "center", gap: 4 }}>✓ 전원 제출 완료</div>
+          )}
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/* ================= 공통 섹션 탭 (관리자) ================= */
+function SpecialTab({ special, headVerse, onSave }) {
+  const [draft, setDraft] = useState(special);
+  const [hv, setHv] = useState(headVerse);
+  useEffect(() => { setDraft(special); setHv(headVerse); }, [special, headVerse]);
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <Card>
+        <SectionTitle>표지 말씀</SectionTitle>
+        <input value={hv.ref} onChange={(e) => setHv({ ...hv, ref: e.target.value })}
+          style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 12, padding: 10, fontSize: 14, marginBottom: 8, background: C.bg, fontFamily: SANS }}
+          placeholder="말씀 출처 (예: 빌립보서 4:6-7)" />
+        <textarea value={hv.text} onChange={(e) => setHv({ ...hv, text: e.target.value })} rows={3}
+          style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 12, padding: 10, fontSize: 14, background: C.bg, resize: "vertical", fontFamily: SANS }} />
+      </Card>
+      {SPECIAL_SECTIONS.map((sec) => (
+        <Card key={sec}>
+          <SectionTitle>{sec}</SectionTitle>
+          <textarea
+            value={draft[sec] || ""} rows={4}
+            onChange={(e) => setDraft({ ...draft, [sec]: e.target.value })}
+            placeholder={`${sec} 기도제목 (비워두면 편지에서 제외돼요)`}
+            style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 12, padding: 10, fontSize: 14, background: C.bg, resize: "vertical", fontFamily: SANS }}
+          />
+        </Card>
+      ))}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <Btn primary onClick={() => onSave(draft, hv)}>공통 섹션 저장</Btn>
+      </div>
+    </div>
+  );
+}
+
+/* ================= 명단 관리 탭 (관리자) ================= */
+function RosterTab({ roster, onSave }) {
+  const [cell, setCell] = useState(roster.cells[0]?.name);
+  const [newName, setNewName] = useState("");
+  const list = roster.members.filter((m) => m.cell === cell);
+
+  const update = (id, patch) => {
+    const next = { ...roster, members: roster.members.map((m) => (m.id === id ? { ...m, ...patch } : m)) };
+    onSave(next);
+  };
+  const remove = (id) => {
+    const next = { ...roster, members: roster.members.filter((m) => m.id !== id) };
+    onSave(next);
+  };
+  const add = () => {
+    const name = newName.trim();
+    if (!name) return;
+    const id = `${cell}|${name}`;
+    if (roster.members.some((m) => m.id === id)) return;
+    onSave({ ...roster, members: [...roster.members, { id, name, cell, role: "", cohort: "", active: true }] });
+    setNewName("");
+  };
+  const resetSeed = () => {
+    if (confirm("명단을 2026년 4월 기도편지 기준으로 초기화할까요? (제출 데이터는 유지)")) onSave(buildSeedRoster());
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <Card style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {roster.cells.map((c) => (
+            <button key={c.name} onClick={() => setCell(c.name)} style={{
+              ...btnBase, padding: "6px 12px", fontSize: 13,
+              background: cell === c.name ? C.ink : C.card, color: cell === c.name ? "#fff" : C.ink,
+              fontWeight: cell === c.name ? 700 : 400,
+            }}>{c.name}</button>
+          ))}
+        </div>
+        <Btn onClick={resetSeed} style={{ fontSize: 12 }}>시드로 초기화</Btn>
+      </Card>
+
+      <Card>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()}
+            placeholder={`${cell}셀에 추가할 이름`}
+            style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 12, padding: 10, fontSize: 14, background: C.bg, fontFamily: SANS }} />
+          <Btn primary onClick={add}>+ 추가</Btn>
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {list.map((m) => (
+            <div key={m.id} style={{
+              display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+              padding: "8px 10px", background: m.active ? C.bg : C.bgDeep,
+              borderRadius: 10, opacity: m.active ? 1 : 0.55,
+            }}>
+              <span style={{ fontWeight: 700, minWidth: 64 }}>{m.name}</span>
+              <select value={m.role} onChange={(e) => update(m.id, { role: e.target.value })}
+                style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: "4px 8px", fontSize: 12, background: C.card, fontFamily: SANS }}>
+                <option value="">셀원</option><option value="셀장">셀장</option><option value="헬퍼">헬퍼</option>
+              </select>
+              <select value={m.cohort} onChange={(e) => update(m.id, { cohort: e.target.value })}
+                style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: "4px 8px", fontSize: 12, background: C.card, fontFamily: SANS }}>
+                <option value="">학년 미지정</option>
+                {[...COHORTS, "졸업/기타"].map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                <Btn onClick={() => update(m.id, { active: !m.active })} style={{ fontSize: 12, padding: "4px 10px" }}>
+                  {m.active ? "휴면 처리" : "활성화"}
+                </Btn>
+                <Btn onClick={() => remove(m.id)} style={{ fontSize: 12, padding: "4px 8px", color: C.rose }}>×</Btn>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+const __root = ReactDOM.createRoot(document.getElementById("root"));
+__root.render(<App />);
+  </script>
+</body>
+</html>
