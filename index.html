@@ -616,6 +616,7 @@ function SubmitTab({ roster, subs, onSave, ym }) {
   const [member, setMember] = useState(null);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const cellMembers = useMemo(() => {
     if (!cell) return [];
@@ -627,10 +628,24 @@ function SubmitTab({ roster, subs, onSave, ym }) {
     ];
   }, [roster, cell]);
 
+  const mySub = member ? subs[member.cell]?.[member.id] : null;
+  const alreadySubmitted = !!mySub?.items?.length;
+
   const pick = (m) => {
     setMember(m);
     const prev = subs[m.cell]?.[m.id];
     setText(prev?.items?.join("\n") || "");
+    setEditing(!prev?.items?.length);
+  };
+
+  const startEdit = () => {
+    setText(mySub?.items?.join("\n") || "");
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setText(mySub?.items?.join("\n") || "");
+    setEditing(false);
   };
 
   const save = async () => {
@@ -639,6 +654,7 @@ function SubmitTab({ roster, subs, onSave, ym }) {
     setSaving(true);
     await onSave(member, items);
     setSaving(false);
+    setEditing(false);
   };
 
   return (
@@ -681,7 +697,23 @@ function SubmitTab({ roster, subs, onSave, ym }) {
         </Card>
       )}
 
-      {member && (
+      {member && alreadySubmitted && !editing && (
+        <Card>
+          <SectionTitle>{member.name} 님이 제출한 기도제목</SectionTitle>
+          <div style={{ display: "grid", gap: 4, marginBottom: 14 }}>
+            {mySub.items.map((it, i) => (
+              <div key={i} style={{ fontSize: 14, lineHeight: 1.8, color: C.ink }}>
+                {mySub.items.length > 1 ? `${i + 1}. ${it}` : it}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <Btn onClick={startEdit}>✎ 수정하기</Btn>
+          </div>
+        </Card>
+      )}
+
+      {member && (!alreadySubmitted || editing) && (
         <Card>
           <SectionTitle>{member.name} 님의 기도제목</SectionTitle>
           <textarea
@@ -693,7 +725,8 @@ function SubmitTab({ roster, subs, onSave, ym }) {
               color: C.ink, outline: "none", resize: "vertical",
             }}
           />
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+            {alreadySubmitted && <Btn onClick={cancelEdit} disabled={saving}>취소</Btn>}
             <Btn primary onClick={save} disabled={saving || !text.trim()}>
               {saving ? <Spinner size={15} /> : "✉"} 저장하기
             </Btn>
