@@ -650,7 +650,6 @@ function SubmitTab({ roster, subs, onSave, ym }) {
 
   const save = async () => {
     const items = text.split("\n").map((s) => s.trim().replace(/^\d+[.)]\s*/, "")).filter(Boolean);
-    if (!items.length) return;
     setSaving(true);
     await onSave(member, items);
     setSaving(false);
@@ -727,7 +726,7 @@ function SubmitTab({ roster, subs, onSave, ym }) {
           />
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
             {alreadySubmitted && <Btn onClick={cancelEdit} disabled={saving}>취소</Btn>}
-            <Btn primary onClick={save} disabled={saving || !text.trim()}>
+            <Btn primary onClick={save} disabled={saving}>
               {saving ? <Spinner size={15} /> : "✉"} 저장하기
             </Btn>
           </div>
