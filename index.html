@@ -101,7 +101,7 @@ const ADMIN_PASS = "202600";
 const DEFAULT_PHRASE = "지체님의 삶 가운데 하나님께서 늘 함께하시기를 기도합니다.";
 const SPECIAL_SECTIONS = ["대표단", "찬양팀", "중보기도팀", "한국누가회"];
 const COHORTS = ["예1", "예2", "본1", "본2", "본3", "본4"];
-const GRADE_OPTIONS = COHORTS;
+const GRADE_OPTIONS = [...COHORTS, "휴학"];
 const GRADE_LABELS = { 본3: "본3 (간3)", 본4: "본4 (간4)" };
 const gradeLabel = (g) => GRADE_LABELS[g] || g;
 const DEFAULT_HEAD_VERSE = {
